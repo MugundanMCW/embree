@@ -15,6 +15,46 @@ jobs:
 ####################################################################
 # CPU Builds and Tests
 ####################################################################
+
+  build-windows-arm64:
+    secrets: inherit
+    uses: intel-innersource/libraries.devops.renderkit.workflows/.github/workflows/windows.yml@main
+    with:
+      runs-on: windows-11-arm
+      artifact-out: build-windows-arm64
+      artifact-path: ./build/embree-*.zip
+      cmd: |
+        git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+        C:\vcpkg\bootstrap-vcpkg.bat
+        C:\vcpkg\vcpkg install tbb:arm64-windows
+
+        $opts  = "-DCMAKE_BUILD_TYPE=Release"
+        $opts += " -DBUILD_TESTING=ON"
+        $opts += " -DEMBREE_TUTORIALS=OFF"
+        $opts += " -DEMBREE_ISPC_SUPPORT=OFF"
+        $opts += " -DEMBREE_ARM=ON"
+        $opts += " -DEMBREE_TASKING_SYSTEM=TBB"
+        $opts += " -DTBB_ROOT=C:/vcpkg/installed/arm64-windows"
+        $opts += " -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        $opts += " -DCMAKE_CXX_FLAGS=/DWIN32_LEAN_AND_MEAN"
+        $opts += " -DEMBREE_ZIP_MODE=ON"
+
+        cmake -S -B build -G "Visual Studio 17 2022" -A ARM64 -DCMAKE_C_COMPILER="clang-cl" -DCMAKE_CXX_COMPILER="clang-cl" -D EMBREE_EXTRA_OPTIONS="$opts"
+        cmake --build build --config Release
+        cmake --build build/embree/build --config Release --target build
+        Copy-Item build/embree/build/embree-*.zip build/ -Force
+
+  windows-arm64-test:
+    secrets: inherit
+    needs: ["build-windows-arm64"]
+    uses: intel-innersource/libraries.devops.renderkit.workflows/.github/workflows/windows.yml@main
+    with:
+      runs-on: windows-11-arm
+      artifact-in: build-windows-arm64
+      cmd: |
+        $EmbreeDir = .\\scripts\\prepare-test-files.ps1 -TestType ctest
+        .\\scripts\\run-tests.ps1 -TestType ctest -EmbreeDir $EmbreeDir -CtestConfig Release
+        
   build-windows:
     secrets: inherit
     uses: intel-innersource/libraries.devops.renderkit.workflows/.github/workflows/windows.yml@main
